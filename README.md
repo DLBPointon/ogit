@@ -16,7 +16,7 @@ This will be a very simple:
 
 Could this be replaced by using global git values if available.
 
-### issues
+### issues (In progress)
 The issues subcommand will:
 - enable viewing of issues in your repo (current repo by default, by using an initialised git repo's .git/config file).
   - `ogit issues view`
@@ -33,6 +33,6 @@ The issues subcommand will:
       - tells user if offline, it wll be cached
       - When online use `ogit issues push`
 
-### repos
+### repos (Planned)
 A subcommand to get some basic overviews of a repo, again defaults to current directories .git/config:
 - `ogit repos [--repo_override, --repo_all] --stats [stars, issues, releases, PRs, contributors]`
