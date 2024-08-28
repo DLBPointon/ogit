@@ -181,7 +181,15 @@ impl std::fmt::Display for IssueList {
 
         let assignee_string = format!("{}\t", &len_assignee);
         let assignee_string_formatted = "-".repeat(assignee_string.len());
-
+        write!(
+            f,
+            "{}NO.\t{}Issue Title\t{}Labels\t{}Assignee\t{}",
+            "|".truecolor(105, 105, 105),
+            "|".truecolor(105, 105, 105),
+            "|".truecolor(105, 105, 105),
+            "|".truecolor(105, 105, 105),
+            "|".truecolor(105, 105, 105),
+        );
         for v in &self.0 {
             let len_inner_title = v.title.len();
             let len_title_remainder = longest_title - &len_inner_title;
