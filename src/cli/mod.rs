@@ -1,8 +1,8 @@
-use clap::{Parser, Subcommand};
+use clap::{ArgGroup, Parser, Subcommand};
 
 // CLI for Fasta Processing
 #[derive(Parser)]
-#[command(version="v1.0.0", about, long_about = None)]
+#[command(author="Damon-Lee Pointon (DLBPointon)", version="v1.0.0", about = "A simple program for playing with GitHub Issues both On and Offline", long_about = None)]
 pub struct Cli {
     // command is optional (TODO: Make this not optional)
     // Reference: https://docs.rs/clap/latest/clap/_derive/_tutorial/chapter_2/index.html#defaults
@@ -22,8 +22,24 @@ pub enum Commands {
         #[arg(short = 'r', long = "repo", default_value = ".git/config")]
         repo: String,
 
+        // THIS SHOULD HAVE A DEFAULT OF 20
+        #[arg(short = 't', long = "terminal_length")]
+        terminal_length: usize,
+
         // Default git config for current dir
         #[arg(short = 'o', long = "overide_repo", default_value = "-NA-")]
         repo_override: String,
+
+        // Cache flag
+        // mutually exclusive with from_cache
+        #[arg(
+            long = "cache_issues",
+            default_value_t = false,
+            help = "Cache issues for project under .git/issue_cache.json. NOTE: this will always overwrite existing file."
+        )]
+        cache_issues: bool,
+
+        #[arg(long = "from_cache", default_value_t = false)]
+        from_cache: bool,
     },
 }

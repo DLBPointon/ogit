@@ -15,8 +15,18 @@ pub fn run() -> Result<(), Error> {
         Some(Commands::Issues {
             config_file,
             repo,
+            terminal_length,
             repo_override,
-        }) => issues(config_file, repo, repo_override),
+            cache_issues,
+            from_cache,
+        }) => issues(
+            config_file,
+            repo,
+            repo_override,
+            terminal_length,
+            cache_issues,
+            from_cache,
+        ),
         None => {
             println!("No command provided");
         }

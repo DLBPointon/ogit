@@ -1,19 +1,19 @@
 use colored::Colorize;
-use std::path::Display;
-use tabled::settings::Style;
+use serde_json;
+use std::fs::File;
+use std::io::BufReader;
+use std::io::Write;
 use tabled::{Table, Tabled};
 
 use config_file::FromConfigFile;
 use ini::ini;
 use reqwest::blocking::{Client, Response};
-use serde::Deserialize;
-use serde_json;
+use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Debug)]
 struct Config {
     user: String,
     host: String,
-    pass: String,
     token: String,
 }
 
@@ -24,7 +24,7 @@ struct Repo {
     repo: String,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 struct Assignee {
     login: String,
 }
@@ -35,7 +35,7 @@ impl std::fmt::Display for Assignee {
     }
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 struct AssigneeList(Vec<Assignee>);
 
 impl AssigneeList {
@@ -57,7 +57,7 @@ impl std::fmt::Display for AssigneeList {
     }
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Serialize)]
 struct Labels {
     id: u64,
     name: String,
@@ -65,7 +65,7 @@ struct Labels {
     description: String,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Serialize)]
 struct LabelsList(Vec<Labels>);
 
 impl std::fmt::Display for LabelsList {
@@ -87,7 +87,7 @@ impl LabelsList {
     }
 }
 
-#[derive(Deserialize, Debug, Tabled)]
+#[derive(Deserialize, Serialize, Debug, Tabled)]
 struct Issue {
     number: u16,
     title: String,
@@ -107,6 +107,7 @@ impl std::fmt::Display for Issue {
     }
 }
 
+#[derive(Serialize, Deserialize)]
 struct IssueList(Vec<Issue>);
 
 impl IssueList {
@@ -171,26 +172,55 @@ impl std::fmt::Display for IssueList {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "GitHub Issues for {}\n", "SOMEWAY TO FIND THIS")?;
 
-        let (longest_title, len_title) = &self.get_max_title();
-        let (longest_number, len_number) = &self.get_max_number();
-        let (longest_labels, len_labels) = &self.get_max_labels();
-        let (longest_assignee, len_assignee) = &self.get_max_assignee();
+        let (longest_title, _len_title) = &self.get_max_title();
+        let (longest_number, _len_number) = &self.get_max_number();
+        let (longest_labels, _len_labels) = &self.get_max_labels();
+        let (longest_assignee, _len_assignee) = &self.get_max_assignee();
 
-        let label_string = format!("{}\t", &len_labels);
-        let label_string_formatted = "-".repeat(label_string.len());
+        // causes 'attempt to subtract with overflow' when only 1 issue and issue number = 1 This is because "NO." has len longer than "1"
+        // Need fix
+        let issue_no = if longest_number <= &"NO.".to_string().len() {
+            0
+        } else {
+            longest_number - "NO.".to_string().len()
+        };
 
-        let assignee_string = format!("{}\t", &len_assignee);
-        let assignee_string_formatted = "-".repeat(assignee_string.len());
+        let issue_spaces = " ".repeat(issue_no);
+
+        let title_no = longest_title - "ISSUE TITLE".to_string().len();
+        let title_spaces = " ".repeat(title_no);
+
+        let labels_no = longest_labels - "LABELS".to_string().len();
+        let labels_spaces = " ".repeat(labels_no + 1);
+
+        let assignee_no = longest_assignee - "ASSIGNEE".to_string().len();
+        let assignee_spaces = " ".repeat(assignee_no + 1);
+
+        // borked
         write!(
             f,
-            "{}NO.\t{}Issue Title\t{}Labels\t{}Assignee\t{}",
+            "{}NO.{}{}ISSUE TITLE{}{}LABELS{}{}ASSIGNEE{}{}\n",
             "|".truecolor(105, 105, 105),
+            issue_spaces,
             "|".truecolor(105, 105, 105),
+            title_spaces,
             "|".truecolor(105, 105, 105),
+            labels_spaces,
             "|".truecolor(105, 105, 105),
+            assignee_spaces,
             "|".truecolor(105, 105, 105),
-        );
+        )?;
         for v in &self.0 {
+            let len_number_remainder = if v.number.to_string().len() < "NO.".to_string().len() {
+                let len_number = "NO.".to_string().len() - v.number.to_string().len();
+                len_number
+            } else {
+                let len_inner_number = v.number.to_string().len();
+                let output = longest_number - &len_inner_number;
+                output
+            };
+            let number_space = " ".repeat(len_number_remainder);
+
             let len_inner_title = v.title.len();
             let len_title_remainder = longest_title - &len_inner_title;
             let title_space = " ".repeat(len_title_remainder);
@@ -204,9 +234,10 @@ impl std::fmt::Display for IssueList {
             let assignee_space = " ".repeat(len_assignee_remainder + 1);
             write!(
                 f,
-                "{}{}\t{}{}{}\t{}{}{}{}{}{}{}\n",
+                "{}{}{}{}{}{}{}{}{}{}{}{}{}\n",
                 "|".truecolor(105, 105, 105),
                 v.number.to_string().blue(),
+                number_space,
                 "|".truecolor(105, 105, 105),
                 v.title,
                 title_space,
@@ -223,7 +254,7 @@ impl std::fmt::Display for IssueList {
     }
 }
 
-fn call_issues(repo_data: Repo, config_data: Config) -> () {
+fn call_issues(repo_data: Repo, config_data: Config) -> IssueList {
     let bearer = format!("Bearer {}", config_data.token);
     let repo = format!(
         "https://api.github.com/repos/{}/{}/issues",
@@ -254,10 +285,37 @@ fn call_issues(repo_data: Repo, config_data: Config) -> () {
     let issues_struct: Vec<Issue> = serde_json::from_str(&issues).unwrap();
 
     let issue_list = IssueList { 0: issues_struct };
-    println!("{}", issue_list);
+
+    issue_list
 }
 
-pub fn issues(config_file: &String, repo: &String, repo_override: &String) -> () {
+fn save_to_json(data: IssueList) -> Result<(), std::io::Error> {
+    let json_data = serde_json::to_string(&data)?;
+    let mut file = File::create(".git/issue_cache.json")?;
+    file.write_all(json_data.as_bytes())?;
+
+    Ok(())
+}
+
+fn print_cache() -> Result<IssueList, std::io::Error> {
+    // get json
+    //     // Open the file containing the JSON data
+    let file = File::open(".git/issue_cache.json")?;
+    let reader = BufReader::new(file);
+
+    // Deserialize the JSON into a MyStruct instance
+    let my_data: IssueList = serde_json::from_reader(reader)?;
+
+    Ok(my_data)
+}
+
+fn from_github(
+    config_file: &String,
+    repo_override: &String,
+    repo: &String,
+    terminal_length: &usize,
+    cache_bool: &bool,
+) {
     let config = Config::from_config_file(config_file).unwrap();
 
     let repo_data = if repo_override.to_owned() == "-NA-".to_string() {
@@ -291,5 +349,39 @@ pub fn issues(config_file: &String, repo: &String, repo_override: &String) -> ()
         y
     };
 
-    let _xx = call_issues(repo_data, config);
+    let full_issue_data = call_issues(repo_data, config);
+
+    if cache_bool.eq(&true) {
+        // Should absolutely be done better!
+        let _xx = save_to_json(full_issue_data);
+    } else {
+        println!("{}", full_issue_data)
+    }
+}
+
+pub fn issues(
+    config_file: &String,
+    repo: &String,
+    repo_override: &String,
+    terminal_length: &usize,
+    cache_bool: &bool,
+    from_cache: &bool,
+) -> () {
+    if from_cache.eq(&true) {
+        let xx = print_cache();
+        match xx {
+            Ok(d) => {
+                println!("{}", d)
+            }
+            Err(_) => todo!(),
+        }
+    } else {
+        from_github(
+            config_file,
+            repo_override,
+            repo,
+            terminal_length,
+            cache_bool,
+        )
+    }
 }
