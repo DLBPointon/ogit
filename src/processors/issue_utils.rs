@@ -1,14 +1,16 @@
+use color_hex::color_from_hex;
+use csscolorparser::{parse, Color};
+
 use colored::Colorize;
+use config_file::FromConfigFile;
+use ini::ini;
+use reqwest::blocking::{Client, Response};
+use serde::{Deserialize, Serialize};
 use serde_json;
 use std::fs::File;
 use std::io::BufReader;
 use std::io::Write;
 use tabled::{Table, Tabled};
-
-use config_file::FromConfigFile;
-use ini::ini;
-use reqwest::blocking::{Client, Response};
-use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Debug)]
 struct Config {
@@ -61,7 +63,7 @@ impl std::fmt::Display for AssigneeList {
 struct Labels {
     id: u64,
     name: String,
-    //colour: String,
+    color: String,
     description: String,
 }
 
@@ -71,7 +73,15 @@ struct LabelsList(Vec<Labels>);
 impl std::fmt::Display for LabelsList {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         for v in &self.0 {
-            write!(f, "{},", v.name)?;
+            match parse(v.color.as_str()) {
+                Ok(color) => {
+                    let [r, g, b, _a] = color.to_rgba8();
+                    write!(f, "{},", v.name.truecolor(r, g, b))?;
+                }
+                Err(e) => {
+                    eprintln!("Failed to parse color: {}", e);
+                }
+            }
         }
         Ok(())
     }
@@ -284,6 +294,8 @@ fn call_issues(repo_data: Repo, config_data: Config) -> IssueList {
     // Better error messages here
     let issues_struct: Vec<Issue> = serde_json::from_str(&issues).unwrap();
 
+    println!("{:?}", issues_struct);
+
     let issue_list = IssueList { 0: issues_struct };
 
     issue_list
@@ -309,13 +321,12 @@ fn print_cache() -> Result<IssueList, std::io::Error> {
     Ok(my_data)
 }
 
-fn from_github(
+fn build_github_call(
     config_file: &String,
     repo_override: &String,
     repo: &String,
     terminal_length: &usize,
-    cache_bool: &bool,
-) {
+) -> (Repo, Config) {
     let config = Config::from_config_file(config_file).unwrap();
 
     let repo_data = if repo_override.to_owned() == "-NA-".to_string() {
@@ -349,14 +360,7 @@ fn from_github(
         y
     };
 
-    let full_issue_data = call_issues(repo_data, config);
-
-    if cache_bool.eq(&true) {
-        // Should absolutely be done better!
-        let _xx = save_to_json(full_issue_data);
-    } else {
-        println!("{}", full_issue_data)
-    }
+    (repo_data, config)
 }
 
 pub fn issues(
@@ -373,15 +377,20 @@ pub fn issues(
             Ok(d) => {
                 println!("{}", d)
             }
-            Err(_) => todo!(),
+            Err(e) => {
+                println!("{}", e)
+            }
         }
     } else {
-        from_github(
-            config_file,
-            repo_override,
-            repo,
-            terminal_length,
-            cache_bool,
-        )
+        let (repo_data, config) =
+            build_github_call(config_file, repo_override, repo, terminal_length);
+        let full_issue_data = call_issues(repo_data, config);
+
+        if cache_bool.eq(&true) {
+            // Should absolutely be done better!
+            let _xx = save_to_json(full_issue_data);
+        } else {
+            println!("{}", full_issue_data)
+        }
     }
 }
