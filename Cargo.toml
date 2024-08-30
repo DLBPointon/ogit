@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+ansi_term = "0.12.1"
 clap = { version = "4.5.16", features = ["cargo", "derive"] }
 color-hex = "0.2.0"
 colored = "2.1.0"

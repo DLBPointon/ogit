@@ -1,8 +1,7 @@
-use color_hex::color_from_hex;
-use csscolorparser::{parse, Color};
-
+use ansi_term::Style;
 use colored::Colorize;
 use config_file::FromConfigFile;
+use csscolorparser::{parse, Color};
 use ini::ini;
 use reqwest::blocking::{Client, Response};
 use serde::{Deserialize, Serialize};
@@ -109,6 +108,7 @@ struct Issue {
 impl std::fmt::Display for Issue {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let issue_no = format!("{}", self.number.to_string().blue());
+
         write!(
             f,
             "| {}\t | {}\t | {} |\n",
@@ -118,12 +118,15 @@ impl std::fmt::Display for Issue {
 }
 
 #[derive(Serialize, Deserialize)]
-struct IssueList(Vec<Issue>);
+struct IssueList {
+    issue_data: Vec<Issue>,
+    meta_data: String,
+}
 
 impl IssueList {
     fn get_max_title(&self) -> (usize, String) {
         let longest_title = &self
-            .0
+            .issue_data
             .iter()
             .map(|x| x.title.clone().len())
             .max()
@@ -136,7 +139,7 @@ impl IssueList {
 
     fn get_max_number(&self) -> (usize, String) {
         let widest_number = self
-            .0
+            .issue_data
             .iter()
             .map(|x| x.number.to_string().clone().len())
             .max()
@@ -150,7 +153,7 @@ impl IssueList {
 
     fn get_max_labels(&self) -> (usize, String) {
         let mut collection = Vec::new();
-        for c in &self.0 {
+        for c in &self.issue_data {
             collection.push(c.labels.count_string());
         }
 
@@ -165,7 +168,7 @@ impl IssueList {
 
     fn get_max_assignee(&self) -> (usize, String) {
         let mut collection = Vec::new();
-        for c in &self.0 {
+        for c in &self.issue_data {
             collection.push(c.assignees.count_string());
         }
 
@@ -176,11 +179,31 @@ impl IssueList {
 
         (widest_assignee.to_owned(), len_assignee)
     }
+
+    fn trim_titles(&mut self, terminal_length: &usize) -> &mut IssueList {
+        if terminal_length.to_owned() != 0 {
+            for c in &mut self.issue_data {
+                if c.title.len() > terminal_length.to_owned() {
+                    c.title = format!("{}...", &c.title[..terminal_length.to_owned()])
+                }
+            }
+        }
+
+        self
+    }
 }
 
 impl std::fmt::Display for IssueList {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "GitHub Issues for {}\n", "SOMEWAY TO FIND THIS")?;
+        write!(
+            f,
+            "{}GitHub Issues for {}\n",
+            "|".truecolor(105, 105, 105),
+            Style::new()
+                .underline()
+                .bold()
+                .paint(self.meta_data.to_owned())
+        )?;
 
         let (longest_title, _len_title) = &self.get_max_title();
         let (longest_number, _len_number) = &self.get_max_number();
@@ -204,23 +227,29 @@ impl std::fmt::Display for IssueList {
         let labels_spaces = " ".repeat(labels_no + 1);
 
         let assignee_no = longest_assignee - "ASSIGNEE".to_string().len();
-        let assignee_spaces = " ".repeat(assignee_no + 1);
+
+        // Normally this adds an extra 1, I'm not sure why. Because I changed the header from ASSIGNEE to ASSIGNEE/S we need to remove 2 spaces. Hence, -1.
+        let assignee_spaces = " ".repeat(assignee_no - 1);
 
         // borked
         write!(
             f,
-            "{}NO.{}{}ISSUE TITLE{}{}LABELS{}{}ASSIGNEE{}{}\n",
+            "{}{}{}{}{}{}{}{}{}{}{}{}{}\n",
             "|".truecolor(105, 105, 105),
-            issue_spaces,
+            Style::new().underline().paint("NO."),
+            Style::new().underline().paint(issue_spaces),
             "|".truecolor(105, 105, 105),
-            title_spaces,
+            Style::new().underline().paint("ISSUE TITLE"),
+            Style::new().underline().paint(title_spaces),
             "|".truecolor(105, 105, 105),
-            labels_spaces,
+            Style::new().underline().paint("LABELS"),
+            Style::new().underline().paint(labels_spaces),
             "|".truecolor(105, 105, 105),
-            assignee_spaces,
+            Style::new().underline().paint("ASSIGNEE/S"),
+            Style::new().underline().paint(assignee_spaces),
             "|".truecolor(105, 105, 105),
         )?;
-        for v in &self.0 {
+        for v in &self.issue_data {
             let len_number_remainder = if v.number.to_string().len() < "NO.".to_string().len() {
                 let len_number = "NO.".to_string().len() - v.number.to_string().len();
                 len_number
@@ -271,7 +300,7 @@ fn call_issues(repo_data: Repo, config_data: Config) -> IssueList {
         repo_data.organisation, repo_data.repo
     );
     let result = Client::new()
-        .get(repo)
+        .get(&repo)
         .query(&[
             ("filter", "created"),
             ("state", "open"),
@@ -294,9 +323,10 @@ fn call_issues(repo_data: Repo, config_data: Config) -> IssueList {
     // Better error messages here
     let issues_struct: Vec<Issue> = serde_json::from_str(&issues).unwrap();
 
-    println!("{:?}", issues_struct);
-
-    let issue_list = IssueList { 0: issues_struct };
+    let issue_list = IssueList {
+        issue_data: issues_struct,
+        meta_data: format!("{}/{}", repo_data.organisation, repo_data.repo),
+    };
 
     issue_list
 }
@@ -384,13 +414,13 @@ pub fn issues(
     } else {
         let (repo_data, config) =
             build_github_call(config_file, repo_override, repo, terminal_length);
-        let full_issue_data = call_issues(repo_data, config);
+        let mut full_issue_data = call_issues(repo_data, config);
 
         if cache_bool.eq(&true) {
             // Should absolutely be done better!
             let _xx = save_to_json(full_issue_data);
         } else {
-            println!("{}", full_issue_data)
+            println!("{}", full_issue_data.trim_titles(terminal_length))
         }
     }
 }
