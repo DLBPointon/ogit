@@ -9,13 +9,12 @@ use serde_json;
 use std::fs::File;
 use std::io::BufReader;
 use std::io::Write;
-use tabled::{Table, Tabled};
 
 #[derive(Deserialize, Debug)]
 struct Config {
     user: String,
-    host: String,
     token: String,
+    settings: String,
 }
 
 #[derive(Deserialize, Debug)]
@@ -96,13 +95,14 @@ impl LabelsList {
     }
 }
 
-#[derive(Deserialize, Serialize, Debug, Tabled)]
+#[derive(Deserialize, Serialize, Debug)]
 struct Issue {
     number: u16,
     title: String,
     labels: LabelsList,
     assignees: AssigneeList,
     updated_at: String,
+    status: String,
 }
 
 impl std::fmt::Display for Issue {

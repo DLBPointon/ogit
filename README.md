@@ -40,7 +40,7 @@ The issues subcommand will:
     - again, should this be automatic if no internet?
 
 ### CREATE (Planned)
-    - `git create --cache_pre / --push`
+    - `git create [--cache_pre / --push]`
     - enter a issue building thing
     - checks if online or not
       - tells user if offline, it wll be cached
