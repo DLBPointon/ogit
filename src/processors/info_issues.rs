@@ -14,7 +14,7 @@ fn info_from_cache(issue: &u16, issue_json: IssueList) {
 pub fn info_issues(
     issue: &u16,
     comments: &bool,
-    debug: &bool,
+    _debug: &bool,
     from_cache: &bool,
     config_file: &String,
     repo: &String,

@@ -11,7 +11,7 @@ pub struct Config {
 
 #[derive(Deserialize, Debug)]
 pub struct Repo {
-    pub url: String,
+    pub _url: String,
     pub organisation: String,
     pub repo: String,
 }
@@ -294,28 +294,10 @@ impl IssueList {
         (widest_assignee.to_owned(), len_assignee)
     }
 
-    pub fn trim_titles(&mut self, terminal_length: &usize) -> &mut IssueList {
+    pub fn trim_titles(&mut self, terminal_length: &u16) -> &mut IssueList {
         if terminal_length.to_owned() != 0 {
             for c in &mut self.issue_data {
-                if c.title.len() > terminal_length.to_owned() {
-                    if &c.title[..terminal_length.to_owned()].len() < &terminal_length {
-                        let trim_spaces =
-                            terminal_length - &c.title[..terminal_length.to_owned()].len();
-                        c.title = format!(
-                            "{}...{}",
-                            &c.title[..terminal_length.to_owned()],
-                            " ".repeat(trim_spaces)
-                        )
-                    } else {
-                        c.title = format!("{}...", &c.title[..terminal_length.to_owned()])
-                    }
-                } else {
-                    c.title = format!(
-                        "{}{}",
-                        &c.title,
-                        " ".repeat(terminal_length - &c.title.len())
-                    )
-                }
+                c.title = format!("{}...", &c.title[..terminal_length.to_owned().into()])
             }
         }
 

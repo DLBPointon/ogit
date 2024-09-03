@@ -1,23 +1,6 @@
 use crate::processors::issue_structs::{Config, Repo};
-use ansi_term::Style;
 use config_file::FromConfigFile;
 use ini::ini;
-
-pub fn check_terminal_length_arg(tl: &usize) -> usize {
-    if tl < &"ISSUE TITLE".to_string().len() {
-        let error_msg = Style::new()
-            .bold()
-            .underline()
-            .paint("Teminal length < 11 not allowed. Defaulting to 11");
-        // Better to be from the actual log crate?
-        println!("WARNING: {error_msg}");
-        // This is the minimum length I want to support,
-        // It is the length of the "ISSUE TITLE" header for the output table
-        11
-    } else {
-        tl.to_owned()
-    }
-}
 
 pub fn build_github_call(
     config_file: &String,
@@ -36,7 +19,7 @@ pub fn build_github_call(
             .collect::<Vec<&str>>()[0];
 
         let x = Repo {
-            url: actual_repo.to_owned(),
+            _url: actual_repo.to_owned(),
             organisation: org.to_string(),
             repo: repo.to_string(),
         };
@@ -46,7 +29,7 @@ pub fn build_github_call(
         let override_split = repo_override.split("/").collect::<Vec<&str>>();
 
         let y = Repo {
-            url: format!(
+            _url: format!(
                 "https://github.com/{}/{}.git",
                 override_split[0], override_split[1]
             ),

@@ -1,5 +1,5 @@
 use crate::processors::from_cache::print_cache;
-use crate::processors::generics::{build_github_call, check_terminal_length_arg};
+use crate::processors::generics::build_github_call;
 use crate::processors::issue_structs::{Config, Issue, IssueList, Repo};
 use reqwest::blocking::Client;
 use serde_json;
@@ -66,17 +66,16 @@ pub fn view_issues(
     config_file: &String,
     repo: &String,
     repo_override: &String,
-    terminal_length: &usize,
+    terminal_length: &u16,
     cache_bool: &bool,
     from_cache: &bool,
     debug: &bool,
 ) -> () {
-    let terminal_length = check_terminal_length_arg(terminal_length);
     if from_cache.eq(&true) {
         let xx = print_cache();
         match xx {
             Ok(mut d) => {
-                println!("{}", d.trim_titles(&terminal_length))
+                println!("{}", d.trim_titles(terminal_length))
             }
             Err(e) => {
                 println!("{}", e)
@@ -90,7 +89,7 @@ pub fn view_issues(
             // Should absolutely be done better!
             let _xx = save_to_json(full_issue_data);
         } else {
-            println!("{}", full_issue_data.trim_titles(&terminal_length))
+            println!("{}", full_issue_data.trim_titles(terminal_length))
         }
     }
 }

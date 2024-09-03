@@ -27,8 +27,17 @@ pub enum Commands {
         repo: String,
 
         // THIS SHOULD HAVE A DEFAULT OF 20
-        #[arg(short = 't', long = "terminal_length", default_value_t = 40)]
-        terminal_length: usize,
+        #[arg(
+            short = 't',
+            long = "terminal_length",
+            default_value_t = 40,
+            value_parser = clap::value_parser!(u16).range(11..100)
+        )]
+        // Clap value parser stops values smaller than "ISSUE TITLE"
+        // which is the column header in the output.
+        // Going smaller than the header causes alignment issue which
+        // is a pain to try and fix
+        terminal_length: u16,
 
         // Default git config for current dir
         #[arg(short = 'o', long = "overide_repo", default_value = "-NA-")]
