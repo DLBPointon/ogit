@@ -1,4 +1,4 @@
-use crate::processors::structs::IssueList;
+use crate::processors::issue_structs::IssueList;
 use std::fs::File;
 use std::io::BufReader;
 

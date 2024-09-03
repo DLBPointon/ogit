@@ -3,6 +3,7 @@ use clap::Parser;
 use cli::{Cli, Commands};
 use std::io::Error;
 
+use crate::processors::info_issues::info_issues;
 use crate::processors::issue_utils::view_issues;
 
 mod cli;
@@ -19,6 +20,7 @@ pub fn run() -> Result<(), Error> {
             repo_override,
             cache_issues,
             from_cache,
+            debug,
         }) => view_issues(
             config_file,
             repo,
@@ -26,6 +28,24 @@ pub fn run() -> Result<(), Error> {
             terminal_length,
             cache_issues,
             from_cache,
+            debug,
+        ),
+        Some(Commands::Info {
+            issue_number,
+            comments,
+            debug,
+            from_cache,
+            config_file,
+            repo,
+            repo_override,
+        }) => info_issues(
+            issue_number,
+            comments,
+            debug,
+            from_cache,
+            config_file,
+            repo,
+            repo_override,
         ),
         None => {
             println!("No command provided");

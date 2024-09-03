@@ -3,7 +3,7 @@ use ogit::run;
 
 // https://doc.rust-lang.org/book/ch12-03-improving-error-handling-and-modularity.html#separation-of-concerns-for-binary-projects
 fn main() {
-    println!("hello kitty - From Winnie");
+    println!("hello kitty - From Winnie (6yo)");
 
     //  https://rust-cli.github.io/book/in-depth/human-communcation.html
     setup_panic!();
