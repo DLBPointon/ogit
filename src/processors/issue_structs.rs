@@ -110,7 +110,6 @@ pub struct Issue {
     number: u16,
     url: String,
     title: String,
-    body: String,
     state: String,
     locked: bool,
     labels: LabelsList,
@@ -124,12 +123,17 @@ pub struct Issue {
     created_at: String,
     updated_at: String,
 
+    // People, me, make issues with no body which causes a:
+    // `Result::unwrap()` on an `Err` value: Error("invalid type: null, expected a string", line: 1, column: 50003)`
+    //
+    #[serde(deserialize_with = "null_to_default")]
+    body: String,
+
     #[serde(deserialize_with = "null_to_default")]
     closed_at: String,
-    //#[serde(deserialize_with = "null_to_default")]
-    //state_reason: String,
 }
 
+/// This display impl is used by the info command
 impl std::fmt::Display for Issue {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let issue_no = format!("{}", self.number.to_string().blue());
@@ -294,10 +298,24 @@ impl IssueList {
         (widest_assignee.to_owned(), len_assignee)
     }
 
-    pub fn trim_titles(&mut self, terminal_length: &u16) -> &mut IssueList {
+    pub fn fix_data(&mut self, terminal_length: &u16) -> &mut IssueList {
         if terminal_length.to_owned() != 0 {
             for c in &mut self.issue_data {
-                c.title = format!("{}...", &c.title[..terminal_length.to_owned().into()])
+                if c.title.len().gt(&terminal_length.to_owned().into()) {
+                    c.title = format!("{}...", &c.title[..terminal_length.to_owned().into()])
+                } else {
+                    c.title = format!(
+                        "{}...{}",
+                        &c.title,
+                        " ".repeat(&terminal_length.to_owned().into() - c.title.len())
+                    )
+                }
+
+                if c.body.is_empty() {
+                    c.body = "\nNO DATA\n".to_string();
+                } else {
+                    c.body = format!("{}", &c.body)
+                }
             }
         }
 

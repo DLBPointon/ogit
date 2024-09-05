@@ -1,3 +1,4 @@
+use crate::cli::GlobalArgs;
 use crate::processors::from_cache::print_cache;
 use crate::processors::generics::build_github_call;
 use crate::processors::issue_structs::{Config, Issue, IssueList, Repo};
@@ -15,12 +16,12 @@ fn call_issues(repo_data: Repo, config_data: Config, debug: &bool) -> IssueList 
     let result = Client::new()
         .get(&repo)
         .query(&[
-            ("filter", "created"),
-            ("state", "open"),
+            ("filter", "all"),
+            //("state", "open"),
             ("orgs", &config_data.user),
-            ("sort", "updated"),
-            ("per_page", "100"),
-            //("page", "1"), // Now see whether we get the link field
+            ("sort", &"updated".to_string()),
+            ("per_page", &"100".to_string()),
+            ("page", &"1".to_string()), // Now see whether we get the link field
         ])
         .header("Accept", "application/vnd.github.raw+json")
         .header("Connection", "keep-alive")
@@ -30,8 +31,9 @@ fn call_issues(repo_data: Repo, config_data: Config, debug: &bool) -> IssueList 
         .send()
         .unwrap();
     // IF THERE'S A PAGE 2.. THEN THOSE ISSUES NEED TO BE INCLUDED
-
-    let issues = result.text().unwrap();
+    // THIS WOULD DIRECTLY USE THE RESULT WHICH CONTAINS THE HEADERS AND MAYBE LINKS TO PAGE2
+    // IF THERE ARE ENOUGH ISSUES TO CAUSE A PAGE 2
+    let issues = &result.text().unwrap().to_owned();
 
     // You can use these like f-strings? But sometimes?
     if debug.eq(&true) {
@@ -56,6 +58,8 @@ fn call_issues(repo_data: Repo, config_data: Config, debug: &bool) -> IssueList 
 
 fn save_to_json(data: IssueList) -> Result<(), std::io::Error> {
     let json_data = serde_json::to_string(&data)?;
+
+    // TODO: This should be based on where the script is called from!!!!
     let mut file = File::create(".git/issue_cache.json")?;
     file.write_all(json_data.as_bytes())?;
 
@@ -64,32 +68,34 @@ fn save_to_json(data: IssueList) -> Result<(), std::io::Error> {
 
 pub fn view_issues(
     config_file: &String,
-    repo: &String,
-    repo_override: &String,
     terminal_length: &u16,
-    cache_bool: &bool,
-    from_cache: &bool,
-    debug: &bool,
+    cache_issues: &bool,
+    globals: &GlobalArgs,
 ) -> () {
-    if from_cache.eq(&true) {
+    if globals.debug.eq(&true) {
+        println!("DEBUGGING")
+    }
+
+    if globals.from_cache.eq(&true) {
         let xx = print_cache();
         match xx {
             Ok(mut d) => {
-                println!("{}", d.trim_titles(terminal_length))
+                println!("{}", d.fix_data(terminal_length))
             }
             Err(e) => {
                 println!("{}", e)
             }
         }
     } else {
-        let (repo_data, config) = build_github_call(config_file, repo_override, repo);
-        let mut full_issue_data = call_issues(repo_data, config, debug);
+        let (repo_data, config) =
+            build_github_call(config_file, &globals.repo_override, &globals.repo);
+        let mut full_issue_data = call_issues(repo_data, config, &globals.debug);
 
-        if cache_bool.eq(&true) {
+        if cache_issues.eq(&true) {
             // Should absolutely be done better!
             let _xx = save_to_json(full_issue_data);
         } else {
-            println!("{}", full_issue_data.trim_titles(terminal_length))
+            println!("{}", full_issue_data.fix_data(terminal_length))
         }
     }
 }

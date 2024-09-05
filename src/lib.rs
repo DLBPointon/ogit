@@ -15,38 +15,14 @@ pub fn run() -> Result<(), Error> {
     match &cli.command {
         Some(Commands::View {
             config_file,
-            repo,
-            terminal_length,
-            repo_override,
-            cache_issues,
-            from_cache,
-            debug,
-        }) => view_issues(
-            config_file,
-            repo,
-            repo_override,
             terminal_length,
             cache_issues,
-            from_cache,
-            debug,
-        ),
+        }) => view_issues(config_file, terminal_length, cache_issues, &cli.global_args),
         Some(Commands::Info {
             issue_number,
             comments,
-            debug,
-            from_cache,
             config_file,
-            repo,
-            repo_override,
-        }) => info_issues(
-            issue_number,
-            comments,
-            debug,
-            from_cache,
-            config_file,
-            repo,
-            repo_override,
-        ),
+        }) => info_issues(issue_number, comments, config_file, &cli.global_args),
         None => {
             println!("No command provided");
         }

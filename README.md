@@ -24,7 +24,7 @@ token = "token: String
 
 I may add other args such as terminal_length here so that there is a default you can control.
 
-### VIEW (In progress)
+### VIEW (Done - 03-09-2024)
 The issues subcommand will:
 - enable viewing of issues in your repo (current repo by default, by using an initialised git repo's .git/config file).
   - `ogit issues`
@@ -46,7 +46,7 @@ The issues subcommand will:
       - tells user if offline, it wll be cached
       - When online use `ogit push` to throw each pre-issue (issues created locally, not on remote) to the repo.
 
-### INFO (Planned)
+### INFO (In Progress)
     - `ogit info --issue [integer] --fields [default: all, status, title, body, assignees, labels, comments]
     - Printing all comments may cause an issue...
     - Should be cached
