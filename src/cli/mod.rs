@@ -14,7 +14,7 @@ pub struct Cli {
 }
 
 #[derive(Args, Clone, Debug)]
-#[group(required = true, multiple = true)]
+#[group(required = false, multiple = true)]
 pub struct GlobalArgs {
     #[arg(
         short = 'd',
