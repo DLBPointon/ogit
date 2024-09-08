@@ -3,7 +3,7 @@ use colored::Colorize;
 use csscolorparser::parse;
 use serde::{Deserialize, Deserializer, Serialize};
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct Config {
     pub user: String,
     pub token: String,
@@ -207,7 +207,7 @@ impl std::fmt::Display for Issue {
 
         write!(
             f,
-            "START\n{}\n{}\n{}\n{}\n{}\n\n{}\n\n{}\nEND",
+            "\nSTART\n{}\n{}\n{}\n{}\n{}\n\n{}\n\n{}\n",
             info_line, assignee_line, user_line, time_line, label_line, title_line, body_line
         )
     }

@@ -21,8 +21,15 @@ pub fn run() -> Result<(), Error> {
         Some(Commands::Info {
             issue_number,
             comments,
+            labels,
             config_file,
-        }) => info_issues(issue_number, comments, config_file, &cli.global_args),
+        }) => info_issues(
+            issue_number,
+            comments,
+            labels,
+            config_file,
+            &cli.global_args,
+        ),
         None => {
             println!("No command provided");
         }

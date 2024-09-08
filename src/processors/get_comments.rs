@@ -109,10 +109,18 @@ pub fn get_comments(comment_url: String, config_data: Config) {
     };
 
     if comment_list.comments.len() == 0 {
-        println!("NO COMMENTS AT: {}", comment_url)
+        println!(
+            "{} |\n\tNO COMMENTS AT: {}",
+            Style::new().underline().bold().paint("Comments:"),
+            comment_url
+        )
     } else if comment_list.comments.len() <= 3 {
         for i in comment_list.comments {
-            println!("{}\n", i)
+            println!(
+                "{}: |\n\t{}\n",
+                Style::new().underline().bold().paint("Comments:"),
+                i
+            )
         }
     } else {
         let output_location = "comments.json";
