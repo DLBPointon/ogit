@@ -30,6 +30,8 @@ fn call_issues(repo_data: Repo, config_data: Config, debug: &bool) -> IssueList 
         .header("Authorization", bearer)
         .send()
         .unwrap();
+
+    // match result {OK(proceed), Err(force from cache)}
     // IF THERE'S A PAGE 2.. THEN THOSE ISSUES NEED TO BE INCLUDED
     // THIS WOULD DIRECTLY USE THE RESULT WHICH CONTAINS THE HEADERS AND MAYBE LINKS TO PAGE2
     // IF THERE ARE ENOUGH ISSUES TO CAUSE A PAGE 2
