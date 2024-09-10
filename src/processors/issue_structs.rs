@@ -321,26 +321,24 @@ impl IssueList {
     pub fn fix_data(&mut self, terminal_length: &u16) -> &mut IssueList {
         if terminal_length.to_owned() != 0 {
             for c in &mut self.issue_data {
+
+                // If issue contains PR struct, then it is inherently a PR and title is changed to reflect that.
                 let pre_title = if c.pull_request != None {
                     format!("(PR) {}", c.title)
                 } else {
                     c.title.clone()
                 };
 
+                // format the title, by taking into account the terminal_length arg
                 c.title = if pre_title.len().gt(&terminal_length.to_owned().into()) {
-
                     format!("{}...", &pre_title[..terminal_length.to_owned().into()])
-
                 } else {
-
                     format!(
                         "{}{}",
                         &pre_title,
                         " ".repeat(&terminal_length.to_owned().into() - &pre_title.len())
                     )
-
                 };
-
 
                 if c.body.is_empty() {
                     c.body = "\nNO DATA\n".to_string();
