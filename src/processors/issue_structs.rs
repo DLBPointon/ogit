@@ -356,7 +356,7 @@ impl std::fmt::Display for IssueList {
     // Gets wierd when there are impropper issues
     // sanger-tol/ear issue 1 for example
     //
-    // TBH, the whole thing needs a re-write
+    // TBH, the whole thing needs a re-write -- it has been rewritten now, but could do with a round 2 dang...
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(
             f,
