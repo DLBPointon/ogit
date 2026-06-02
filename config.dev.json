@@ -1,0 +1,60 @@
+{
+    "_comment": "Example ogit configuration — copy to $HOME/.ogit/config.json and fill in your tokens.",
+    "sources": [
+        {
+            "name": "github",
+            "platform": "github",
+            "enabled": true,
+            "personal_access_token": "ghp_YOUR_GITHUB_TOKEN_HERE",
+            "api_url": "https://api.github.com"
+        },
+        {
+            "name": "gitlab",
+            "platform": "gitlab",
+            "enabled": false,
+            "personal_access_token": "glpat_YOUR_GITLAB_TOKEN_HERE",
+            "api_url": "https://gitlab.com/api/v4"
+        },
+        {
+            "name": "gitea",
+            "platform": "gitea",
+            "enabled": false,
+            "personal_access_token": "YOUR_GITEA_TOKEN_HERE",
+            "api_url": "http://your-gitea-instance.example.com:3000",
+            "username": "your-gitea-username",
+            "allow_insecure_tls": false
+        }
+    ],
+    "clone_root": "~/code",
+    "user_colour": "#61afef",
+    "comments_per_page": 10,
+    "repos": [
+        {
+            "name": "my-org/my-repo",
+            "address": "my-org/my-repo",
+            "path": "~/code/my-org/my-repo",
+            "colour": "#e06c75",
+            "source": "github",
+            "pinned": true,
+            "organisation": "my-org"
+        },
+        {
+            "name": "my-org/another-repo",
+            "address": "my-org/another-repo",
+            "path": "~/code/my-org/another-repo",
+            "colour": "#98c379",
+            "source": "github",
+            "pinned": false,
+            "organisation": "my-org"
+        },
+        {
+            "name": "other-org/some-lib",
+            "address": "other-org/some-lib",
+            "path": "",
+            "colour": "#e5c07b",
+            "source": "github",
+            "pinned": false,
+            "organisation": "other-org"
+        }
+    ]
+}
