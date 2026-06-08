@@ -1,12 +1,19 @@
-//! Pure filter logic — no I/O, no rendering.
+//! Issue filtering and search logic.
 //!
-//! `FilterState` holds the transient UI state for the filter modal.
-//! The free functions `make_filter_state`, `matches_filter`, and
-//! `filtered_issues` are fully unit-testable in isolation.
+//! This module provides:
+//! - `FilterState`: Transient UI state for the filter modal
+//! - `matches_filter`: Check if a single issue passes all active filters
+//! - `filtered_issues`: Get all issues matching active filters
+//! - `make_filter_state`: Build filter UI state from current filters and loaded issues
+//!
+//! All logic is pure: zero I/O and no rendering. Fully unit-testable.
 
 use crate::model::{ALL_CONFIGURED, Comment, Issue, IssueList, IssueSource, RepoSpec};
 
-/// Which field in the filter modal currently has focus.
+/// Tracks which field in the filter modal currently has keyboard focus.
+///
+/// Used to determine which filter value to update when the user types,
+/// and which field to highlight in the rendered UI.
 #[derive(Debug, Default, PartialEq, Clone, Copy)]
 pub enum FilterStage {
     #[default]
@@ -20,8 +27,19 @@ pub enum FilterStage {
 }
 
 impl FilterStage {
-    /// Advance to the next stage, cycling back to `Author` after the last one.
-    /// Pass `has_repo = true` when the repo panel is visible (ALL view).
+    /// Advances to the next filter field, cycling back to Author after the last.
+    ///
+    /// The Repo field only appears when `has_repo` is true, which happens in the
+    /// ALL view when multiple repos are available. In single-repo views, Search
+    /// cycles directly back to Author.
+    ///
+    /// # Arguments
+    ///
+    /// * `has_repo` - True if the repo panel is visible (i.e., in the ALL view)
+    ///
+    /// # Returns
+    ///
+    /// The next filter stage in the cycle.
     pub fn next(self, has_repo: bool) -> Self {
         match self {
             Self::Author => Self::Tag,
@@ -40,7 +58,18 @@ impl FilterStage {
     }
 }
 
-/// Transient UI state for the filter modal dialog.
+/// UI state for the filter modal dialog.
+///
+/// Holds both the current filter values and the dropdown lists for each field.
+/// Built fresh whenever the filter dialog is opened, and discarded when closed.
+///
+/// # Fields
+///
+/// - `stage`: Which field currently has focus
+/// - `author`, `tag`, `status`, `kind`, `query`: Current filter values
+/// - `author_items`, `tag_items`, etc.: Available options for dropdowns
+/// - `*_selected`: Currently selected index in each dropdown
+/// - `repo_items`, `repo_cursor`, `repo_toggles`: Multi-select for repos (ALL view only)
 #[derive(Debug)]
 pub struct FilterState {
     /// Which field currently has focus.
@@ -97,7 +126,18 @@ impl Default for FilterState {
     }
 }
 
-/// Collect unique, case-insensitively deduped, sorted names from an iterator.
+/// Collects unique, deduplicated, and sorted names from an iterator.
+///
+/// Deduplication is case-insensitive, but the original case is preserved.
+/// Empty names are skipped.
+///
+/// # Arguments
+///
+/// * `names` - Iterator of names to collect
+///
+/// # Returns
+///
+/// A sorted vector with unique names (case-insensitive dedup).
 fn collect_unique_sorted(names: impl Iterator<Item = String>) -> Vec<String> {
     let mut seen_lower: std::collections::HashSet<String> = Default::default();
     let mut out: Vec<String> = Vec::new();
@@ -111,8 +151,20 @@ fn collect_unique_sorted(names: impl Iterator<Item = String>) -> Vec<String> {
     out
 }
 
-/// Build a dropdown list (empty sentinel prepended) and find the selected index
-/// for the given current filter value.
+/// Builds a dropdown list with an empty sentinel and finds the selected index.
+///
+/// Prepends an empty string as the first option (for clearing the filter),
+/// then finds the index of the item that best matches the current value.
+/// Matching is case-insensitive substring match.
+///
+/// # Arguments
+///
+/// * `names` - Iterator of names to include in the dropdown
+/// * `current` - The current filter value (used to find the selected index)
+///
+/// # Returns
+///
+/// A tuple of (dropdown items, selected index). Defaults to index 0 if no match.
 fn build_dropdown(names: impl Iterator<Item = String>, current: &str) -> (Vec<String>, usize) {
     let items: Vec<String> = std::iter::once(String::new()).chain(names).collect();
     let selected = if current.is_empty() {
@@ -128,8 +180,25 @@ fn build_dropdown(names: impl Iterator<Item = String>, current: &str) -> (Vec<St
     (items, selected)
 }
 
-/// Build a fresh [`FilterState`] pre-populated from the current app filter values
-/// and the loaded issue data (for dropdown lists).
+/// Builds a fresh FilterState pre-populated from current filters and loaded issues.
+///
+/// Creates a complete FilterState ready to render and interact with. Includes:
+/// - Current filter values
+/// - Dropdown lists for Author and Tag (built from loaded issues)
+/// - Fixed options for Status and Kind
+/// - Multi-select list for repos (in ALL view only)
+///
+/// # Arguments
+///
+/// * `author_filter`, `tag_filter`, etc. - Current active filter values
+/// * `issues` - Loaded issue data (used to populate Author and Tag dropdowns)
+/// * `details_comments` - Comments from expanded issue (also contributes to Author list)
+/// * `repo_specs` - All configured repos (for repo multi-select)
+/// * `repo_filter` - Currently selected repos (for multi-select state)
+///
+/// # Returns
+///
+/// A complete FilterState ready for UI rendering.
 pub fn make_filter_state(
     author_filter: &Option<String>,
     tag_filter: &Option<String>,
@@ -216,7 +285,27 @@ pub fn make_filter_state(
     filter_state
 }
 
-/// Return `true` if `issue` passes all currently active filters.
+/// Checks if a single issue passes all active filters.
+///
+/// Tests the issue against each active filter:
+/// - Status: Case-insensitive comparison with issue.state
+/// - Author: Case-insensitive substring match with creator login
+/// - Tag: Case-insensitive substring match against any label
+/// - Search: Case-insensitive substring match against title or body
+/// - Kind: Check if issue is a PR ("pr") or not ("issue"), empty = both
+/// - Repo: Check if repo_name is in the filter list (only applies in ALL view)
+///
+/// All filters are AND'd together; all must pass for the issue to match.
+///
+/// # Arguments
+///
+/// * `issue` - The issue to test
+/// * `status_filter`, `author_filter`, etc. - The active filter values (None = no filter)
+/// * `repo_filter` - List of repo names to match (empty = all repos)
+///
+/// # Returns
+///
+/// `true` if the issue passes all filters, `false` otherwise.
 pub fn matches_filter(
     issue: &Issue,
     status_filter: &Option<String>,
@@ -289,7 +378,23 @@ pub fn matches_filter(
     true
 }
 
-/// Return all issues from `issues` that pass the active filters.
+/// Returns all issues from a list that pass the active filters.
+///
+/// Filters issues using `matches_filter` and sorts the result:
+/// - PRs float to the top
+/// - Non-PRs follow
+/// - Order within each group is preserved (stable sort)
+///
+/// # Arguments
+///
+/// * `issues` - The issue list to filter (None returns empty vector)
+/// * `status_filter`, `author_filter`, etc. - Active filter values
+/// * `repo_filter` - List of selected repos
+///
+/// # Returns
+///
+/// A vector of references to matching issues (PRs first, stable sort).
+/// Returns empty vector if `issues` is None.
 pub fn filtered_issues<'a>(
     issues: Option<&'a IssueList>,
     status_filter: &Option<String>,

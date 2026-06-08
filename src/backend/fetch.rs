@@ -314,6 +314,23 @@ fn fetch_issues_for_spec(
     Ok(issue_list)
 }
 
+/// Fetches all issues from a single repository.
+///
+/// Loads configuration automatically and handles pagination internally.
+/// Uses local caching to minimize API calls; incremental fetches will only
+/// request issues updated since the last successful fetch.
+///
+/// # Arguments
+///
+/// * `spec` - The repository to fetch from
+/// * `creator` - Optional filter to issues created by a specific user
+/// * `state_filter` - Optional filter: "open", "closed", or None for all
+/// * `on_page` - Callback invoked after each page loads with (issues_so_far, page_number)
+///
+/// # Returns
+///
+/// An `IssueList` with `cached` flag indicating freshness, or an error.
+/// For incremental fetches, results are merged with cached data.
 pub fn fetch_issues(
     spec: &RepoSpec,
     creator: Option<&str>,
@@ -324,6 +341,22 @@ pub fn fetch_issues(
     fetch_issues_for_spec(&config, spec, creator, state_filter, on_page)
 }
 
+/// Fetches issues from multiple repositories and aggregates them.
+///
+/// Each repository is fetched on its own thread (subject to semaphore limits).
+/// Non-fatal errors (e.g., a single repo failing) are collected in warnings.
+/// Issues are marked with their `repo_name` field for filtering in the ALL view.
+///
+/// # Arguments
+///
+/// * `repo_specs` - List of repositories to fetch from
+/// * `state_filter` - Optional filter applied to all repos
+/// * `on_progress` - Callback with (fetched_count, total_count, current_repo_name)
+///
+/// # Returns
+///
+/// An aggregated `IssueList` with `meta_data=All` and per-issue `repo_name` set.
+/// Non-fatal warnings are included in the result.
 pub fn fetch_issues_many(
     repo_specs: &[RepoSpec],
     state_filter: Option<&str>,
@@ -359,6 +392,24 @@ pub fn fetch_issues_many(
     })
 }
 
+/// Fetches a single page of comments for an issue.
+///
+/// Loads configuration and uses the specified source for authentication.
+/// Results are cached to reduce API calls.
+///
+/// # Arguments
+///
+/// * `comments_url` - The comments URL from an Issue object
+/// * `source_name` - Name of the SourceConfig to use for authentication
+/// * `page` - 1-indexed page number
+/// * `per_page` - Number of comments per page
+///
+/// # Returns
+///
+/// A tuple of (comments_list, cached, has_more_pages) where:
+/// - `comments`: The comments on this page
+/// - `cached`: Whether this result came from local cache
+/// - `has_more_pages`: Whether additional pages are available
 pub fn fetch_comments(
     comments_url: &str,
     source_name: &str,
@@ -460,6 +511,7 @@ pub fn fetch_comments(
 /// - Gitea:   `GET /orgs/{org}/repos`
 ///
 /// Returns one [`RepoDbEntry`] per discovered repository.
+/// Automatically falls back from org endpoint to user endpoint if needed.
 pub fn fetch_org_repos(org: &str, source_name: &str) -> Result<Vec<RepoDbEntry>, GenericError> {
     let config = load_config()?;
     let source = config

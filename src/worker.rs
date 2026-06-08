@@ -1,4 +1,11 @@
-//! Concurrency boundary — the background worker thread and its message types.
+//! Background worker thread and message passing.
+//!
+//! This module manages concurrency by dispatching work to a background worker thread.
+//! The main app sends requests to the worker and receives responses asynchronously.
+//!
+//! The worker uses a semaphore to limit concurrent threads, ensuring that large
+//! fetches (e.g., multi-repo issues) don't overwhelm the system while still allowing
+//! parallelism for fast operations like cloning.
 
 use std::sync::mpsc;
 use std::sync::{Arc, Condvar, Mutex};
@@ -6,7 +13,21 @@ use std::thread;
 
 use crate::model::{Comment, IssueList, RepoDbEntry, RepoSpec};
 
-/// Requests sent to the background worker thread.
+/// A request sent to the background worker thread.
+///
+/// The main TUI thread sends these requests to work off the main thread.
+/// Each variant dispatches to a different backend function.
+///
+/// # Variants
+///
+/// - `FetchIssues` — Fetch issues from a single repo
+/// - `FetchIssuesMany` — Fetch issues from multiple repos (aggregated view)
+/// - `FetchIssueDetails` — Fetch a page of comments for an issue
+/// - `FetchOrgRepos` — Discover all repos in an organization
+/// - `FetchUserOrgs` — List organizations the user belongs to
+/// - `CloneRepo` — Clone a repo to the local filesystem
+/// - `FetchCollaboratorRepos` — Fetch repos where user is a collaborator
+/// - `FetchUserStats` — Fetch user's involvement count
 pub enum BackendRequest {
     FetchIssues {
         repo_spec: RepoSpec,
@@ -44,7 +65,22 @@ pub enum BackendRequest {
     },
 }
 
-/// Responses sent back from the background worker thread.
+/// A response sent back from the background worker thread.
+///
+/// The main TUI thread receives these in its event loop to update UI state.
+/// Some requests may generate multiple responses (e.g., progress updates)
+/// followed by a final result.
+///
+/// # Variants
+///
+/// - `Issues(Result<IssueList, String>)` — Fetch result (or error message)
+/// - `IssueDetails(Result<(issue_num, comments, cached, has_more), String>)` — Comment page
+/// - `OrgRepos { org, result }` — Organization discovery result
+/// - `UserOrgs { source_name, result }` — List of org names
+/// - `Cloned { address, result }` — Clone result with (path, color)
+/// - `CollaboratorRepos { source_name, result }` — Collaborator repos
+/// - `UserStats { result }` — User involvement count (or None if unsupported)
+/// - `IssueProgress { fetched, total, current_repo }` — Progress update (sent during multi-repo fetch)
 pub enum BackendResponse {
     Issues(Result<IssueList, String>),
     IssueDetails(Result<(u32, Vec<Comment>, bool, bool), String>),
@@ -84,11 +120,19 @@ pub enum BackendResponse {
 
 // ── Error formatting ────────────────────────────────────────────────────────────
 
-/// Format an error together with its full cause chain.
+/// Formats an error with its full cause chain.
 ///
-/// `e.to_string()` on a `Box<dyn Error>` (or `reqwest::Error`) only prints the
-/// outermost message and silently drops the underlying cause (e.g. "connection
-/// refused"). Walking `Error::source()` gives users the actionable detail.
+/// Unlike `e.to_string()`, which only prints the outermost message,
+/// this walks the error source chain to include all underlying causes.
+/// For example: instead of "HTTP error", returns "HTTP error: connection refused: Network unreachable".
+///
+/// # Arguments
+///
+/// * `e` - The error to format
+///
+/// # Returns
+///
+/// A complete error message including all causes.
 fn format_error(e: &dyn std::error::Error) -> String {
     use std::fmt::Write;
     let mut msg = e.to_string();
@@ -102,8 +146,10 @@ fn format_error(e: &dyn std::error::Error) -> String {
 
 // ── Semaphore ─────────────────────────────────────────────────────────────────
 
-/// A simple counting semaphore that bounds the number of concurrently running
-/// worker threads to `max` at any one time.
+/// A simple counting semaphore for bounding concurrent workers.
+///
+/// Limits the number of concurrently running threads to a configured maximum.
+/// Excess requests queue in the mpsc channel until a slot becomes free.
 struct Semaphore {
     max: usize,
     active: Mutex<usize>,
@@ -111,6 +157,11 @@ struct Semaphore {
 }
 
 impl Semaphore {
+    /// Creates a new semaphore with a maximum concurrent count.
+    ///
+    /// # Arguments
+    ///
+    /// * `max` - Maximum number of concurrent acquirers (will be at least 1)
     fn new(max: usize) -> Self {
         // Guard against a zero limit which would deadlock immediately.
         let max = max.max(1);
@@ -121,7 +172,9 @@ impl Semaphore {
         }
     }
 
-    /// Block until a slot is available, then take it.
+    /// Blocks until a slot is available, then takes it.
+    ///
+    /// Increments the active counter. If already at max, waits on the condition variable.
     fn acquire(&self) {
         let mut active = self.active.lock().unwrap();
         while *active >= self.max {
@@ -130,7 +183,9 @@ impl Semaphore {
         *active += 1;
     }
 
-    /// Release a slot and wake a waiting acquirer.
+    /// Releases a slot and wakes a waiting acquirer.
+    ///
+    /// Decrements the active counter and notifies one waiting thread.
     fn release(&self) {
         let mut active = self.active.lock().unwrap();
         *active -= 1;
@@ -140,7 +195,16 @@ impl Semaphore {
 
 // ── Request dispatch ──────────────────────────────────────────────────────────
 
-/// Execute a single backend request and send the response on `tx`.
+/// Executes a single backend request and sends responses.
+///
+/// Dispatches a BackendRequest to the appropriate backend function,
+/// formats errors, and sends response(s) back on the channel.
+/// Some requests may generate multiple responses (progress updates).
+///
+/// # Arguments
+///
+/// * `req` - The request to handle
+/// * `tx` - Channel to send response(s) back on
 fn handle_request(req: BackendRequest, tx: &mpsc::Sender<BackendResponse>) {
     match req {
         BackendRequest::FetchIssues {
@@ -238,12 +302,24 @@ fn handle_request(req: BackendRequest, tx: &mpsc::Sender<BackendResponse>) {
 
 // ── Worker loop ───────────────────────────────────────────────────────────────
 
-/// The background worker loop.
+/// The background worker event loop.
 ///
-/// Each incoming request is dispatched onto its own `thread::spawn`'d thread so
-/// that a slow call (e.g. multi-page `FetchIssuesMany`) never blocks faster
-/// requests. `max_threads` caps the number of concurrently running threads;
-/// excess requests queue in the mpsc channel until a slot becomes free.
+/// Runs in a dedicated thread and processes requests from the main TUI thread.
+/// Design:
+/// - Each request is dispatched to its own `thread::spawn`'d thread
+/// - A semaphore limits concurrent threads to `max_threads`
+/// - Slow fetches (e.g., multi-page issues) don't block faster requests
+/// - Excess requests queue in the mpsc channel
+///
+/// # Arguments
+///
+/// * `rx` - Channel to receive requests from the main thread
+/// * `tx` - Channel to send responses back to the main thread
+/// * `max_threads` - Maximum concurrent worker threads (from config, usually 4)
+///
+/// # Panics
+///
+/// Never returns (runs until the receiver is closed).
 pub fn worker(
     rx: mpsc::Receiver<BackendRequest>,
     tx: mpsc::Sender<BackendResponse>,

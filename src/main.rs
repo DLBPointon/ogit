@@ -1,4 +1,12 @@
-//! New thin entry point — to be renamed to `main.rs` once the old files are removed.
+//! Application entry point and CLI handling.
+//!
+//! This module handles:
+//! - CLI argument parsing via clap
+//! - Terminal setup and teardown (raw mode, alternate screen)
+//! - Panic hook to restore terminal state on crash
+//! - Repository validation and suggestions
+//! - JSON output mode for scripting
+//! - Main TUI event loop initialization
 
 mod app;
 mod backend;
@@ -21,9 +29,20 @@ use serde::Serialize;
 
 use crate::cli::Cli;
 
-/// Returns true if `address` (e.g. `"owner/repo"`) matches the user-supplied
-/// `name`, which may be a full address or just the repo-name part, compared
-/// case-insensitively.
+/// Checks if a repository address matches a user-supplied name.
+///
+/// Performs case-insensitive matching against both the full address and just
+/// the repository name portion. For example, both "rust-lang/rust" and "rust"
+/// match the address "rust-lang/rust".
+///
+/// # Arguments
+///
+/// * `address` - The full repository address in `owner/repo` format
+/// * `name` - The user-supplied name, which may be a full address or just the repo name
+///
+/// # Returns
+///
+/// `true` if the name matches (case-insensitive), `false` otherwise
 fn db_entry_matches(address: &str, name: &str) -> bool {
     let lower_addr = address.to_lowercase();
     let lower_name = name.to_lowercase();
@@ -31,6 +50,23 @@ fn db_entry_matches(address: &str, name: &str) -> bool {
     lower_addr == lower_name || repo_part == lower_name
 }
 
+/// Runs the OGit application.
+///
+/// This is the main entry point. It:
+/// 1. Parses CLI arguments
+/// 2. Validates the `--repo` argument if provided
+/// 3. Handles `--json` mode for non-interactive output
+/// 4. Sets up the terminal (raw mode, alternate screen)
+/// 5. Initializes the TUI app and event loop
+/// 6. Restores the terminal on exit
+///
+/// # Returns
+///
+/// `Ok(())` on successful exit, or `Err` if terminal setup fails or validation errors occur.
+///
+/// # Panics
+///
+/// Terminal state is preserved even if a panic occurs, thanks to the custom panic hook.
 fn main() -> io::Result<()> {
     let cli = Cli::parse();
 
@@ -226,8 +262,24 @@ fn main() -> io::Result<()> {
 
 // ── JSON output mode ─────────────────────────────────────────────────────────
 
-/// Resolve `name` to a [`RepoSpec`], checking configured specs then the
-/// org-discovery database. Returns an error if nothing matches.
+/// Resolves a repository name to a [`RepoSpec`].
+///
+/// Searches for a matching repository in two places:
+/// 1. Configured repository specs (highest priority)
+/// 2. Organization discovery database
+///
+/// The search is case-insensitive and matches against both the full address
+/// and just the repository name portion.
+///
+/// # Arguments
+///
+/// * `name` - The repository name or address to search for
+/// * `specs` - Configured repository specifications
+/// * `db_entries` - Discovered repository database entries
+///
+/// # Returns
+///
+/// `Ok(RepoSpec)` if a matching repository is found, `Err` with a helpful message otherwise.
 fn find_repo_spec_for_json(
     name: &str,
     specs: &[crate::model::RepoSpec],
@@ -254,11 +306,28 @@ fn find_repo_spec_for_json(
     ))
 }
 
-/// Fetch the requested issue(s) (and optionally all comments) for `repo_name`
-/// and print the result as JSON to stdout.
+/// Fetches and outputs issues as JSON for scripting and tool integration.
 ///
-/// - Single issue: prints `{ "issue": …, "comments": […] }` (backward-compat)
-/// - Multiple issues: prints a JSON array of the same objects
+/// Resolves the repository name, fetches the requested issue(s) from the API,
+/// and prints the result to stdout as JSON. The output format depends on the
+/// number of issues requested:
+///
+/// - Single issue: `{ "issue": {...}, "comments": [...] }`
+/// - Multiple issues: A JSON array of issue objects
+///
+/// If `with_comments` is true, fetches and includes all comment pages for
+/// each requested issue.
+///
+/// # Arguments
+///
+/// * `repo_name` - The repository name or address
+/// * `issue_numbers` - The issue numbers to fetch (at least one required)
+/// * `with_comments` - If true, include the full comment thread for each issue
+///
+/// # Returns
+///
+/// `Ok(())` if successful and JSON is printed,
+/// `Err` if the repo or issue cannot be found or if API calls fail.
 fn run_json_output(repo_name: &str, issue_numbers: &[u32], with_comments: bool) -> io::Result<()> {
     let specs = crate::backend::load_repo_specs().unwrap_or_default();
     let repo_db = crate::backend::load_repo_db().unwrap_or_default();

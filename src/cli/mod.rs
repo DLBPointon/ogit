@@ -1,6 +1,18 @@
+//! Command-line interface definition.
+//!
+//! Uses `clap` for argument parsing. Defines two modes of operation:
+//! - **TUI mode**: Default behavior; launches the interactive terminal UI
+//! - **JSON mode**: `--json` flag; exports issue data and exits without TUI
+//!
+//! Additional features:
+//! - Repository filtering with `--repo` (configurable or discovered)
+//! - Issue selection with `--issue` (single or multiple)
+//! - Optional comment fetching with `--with-comments`
+//! - `clone` subcommand for repository cloning
+
 use clap::{Parser, Subcommand};
 
-/// The bare ASCII art used in the TUI dashboard and CLI header.
+/// The ASCII art logo used in the TUI dashboard and CLI header.
 pub const OGIT_LOGO: &str = r#"
    _______  _______  ___   _______
   |       ||       ||   | |       |
@@ -11,6 +23,11 @@ pub const OGIT_LOGO: &str = r#"
   |_______||_______||___|   |___|||
 "#;
 
+/// Main CLI argument structure.
+///
+/// Defines all supported command-line options and subcommands.
+/// The default behavior (without subcommands) launches the TUI.
+/// Use `--json` for non-interactive JSON export mode.
 #[derive(Parser, Debug)]
 #[command(
     name = "OGit",
@@ -79,9 +96,14 @@ pub struct Cli {
     pub with_comments: bool,
 }
 
+/// Subcommands for ogit.
+///
+/// Currently only `clone` is supported. Subcommands are processed
+/// inside the TUI for now; `--repo` and `--issue` can be used with subcommands.
 #[derive(Subcommand, Debug)]
 pub enum Commands {
-    /// Clone a repository and register it in ~/.ogit/config.json.
+    /// Clones a repository and registers it in configuration.
+    ///
     ///
     /// Clones the repo to <clone_root>/<owner>/<repo> (where clone_root is
     /// set in your config, defaulting to ~/code), then adds an entry so it
